@@ -1,0 +1,151 @@
+itaf.docs.enabled=true
+itaf.docs.source-path=itaf-docs/content-docs/versions/latest/ui/itaf-ui-guide.md
+itaf.docs.destination-dir=docs/ui
+itaf.docs.overwrite=true
+
+-----------------------------
+
+package com.itaf.documentation.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+@Component
+@ConfigurationProperties(prefix = "itaf.docs")
+public class ItafDocsProperties {
+
+    private boolean enabled = true;
+    private String sourcePath;
+    private String destinationDir;
+    private boolean overwrite = true;
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public String getSourcePath() {
+        return sourcePath;
+    }
+
+    public void setSourcePath(String sourcePath) {
+        this.sourcePath = sourcePath;
+    }
+
+    public String getDestinationDir() {
+        return destinationDir;
+    }
+
+    public void setDestinationDir(String destinationDir) {
+        this.destinationDir = destinationDir;
+    }
+
+    public boolean isOverwrite() {
+        return overwrite;
+    }
+
+    public void setOverwrite(boolean overwrite) {
+        this.overwrite = overwrite;
+    }
+}
+
+----------------------------------------------
+package com.itaf.documentation.service;
+
+import com.itaf.documentation.config.ItafDocsProperties;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Component;
+
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+
+@Component
+public class ItafDocumentationExtractor {
+
+    private final ItafDocsProperties props;
+
+    public ItafDocumentationExtractor(ItafDocsProperties props) {
+        this.props = props;
+    }
+
+    public void extract() {
+
+        if (!props.isEnabled()) {
+            return;
+        }
+
+        // 🛡️ PCF guard
+        if (System.getenv().containsKey("VCAP_APPLICATION")) {
+            System.out.println("Skipping ITAF docs extraction on PCF");
+            return;
+        }
+
+        try {
+            ClassPathResource resource =
+                    new ClassPathResource(props.getSourcePath());
+
+            if (!resource.exists()) {
+                throw new IllegalStateException(
+                        "ITAF doc not found in classpath: " + props.getSourcePath()
+                );
+            }
+
+            Path targetDir = Path.of(
+                    System.getProperty("user.dir"),
+                    props.getDestinationDir()
+            );
+
+            Files.createDirectories(targetDir);
+
+            String fileName = Path.of(props.getSourcePath()).getFileName().toString();
+            Path targetFile = targetDir.resolve(fileName);
+
+            if (Files.exists(targetFile) && !props.isOverwrite()) {
+                System.out.println("ITAF doc already exists, skipping: " + targetFile);
+                return;
+            }
+
+            try (InputStream in = resource.getInputStream()) {
+                Files.copy(
+                        in,
+                        targetFile,
+                        StandardCopyOption.REPLACE_EXISTING
+                );
+            }
+
+            System.out.println("✅ ITAF doc extracted → " + targetFile);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to extract ITAF documentation", e);
+        }
+    }
+}
+
+-------------------------------------
+
+package com.itaf.documentation.startup;
+
+import com.itaf.documentation.service.ItafDocumentationExtractor;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.stereotype.Component;
+
+@Component
+public class ItafDocsStartupRunner implements ApplicationRunner {
+
+    private final ItafDocumentationExtractor extractor;
+
+    public ItafDocsStartupRunner(ItafDocumentationExtractor extractor) {
+        this.extractor = extractor;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        extractor.extract();
+    }
+}
