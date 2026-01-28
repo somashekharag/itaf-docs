@@ -1,0 +1,42 @@
+   private void combineFiles(Path directory) throws Exception {
+
+        Path combinedFile = directory.resolve(
+                props.getCombine().getOutputFile()
+        );
+
+        List<Path> markdownFiles = Files.list(directory)
+                .filter(p -> p.toString().endsWith(".md"))
+                .filter(p -> !p.getFileName().equals(combinedFile.getFileName()))
+                .sorted(Comparator.comparing(Path::getFileName))
+                .toList();
+
+        try (BufferedWriter writer = Files.newBufferedWriter(
+                combinedFile,
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING
+        )) {
+
+            for (int i = 0; i < markdownFiles.size(); i++) {
+                Path file = markdownFiles.get(i);
+
+                Files.lines(file, StandardCharsets.UTF_8).forEach(line -> {
+                    try {
+                        writer.write(line);
+                        writer.newLine();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+
+                if (i < markdownFiles.size() - 1) {
+                    writer.newLine();
+                    writer.write(props.getCombine().getSeparator());
+                    writer.newLine();
+                    writer.newLine();
+                }
+            }
+        }
+
+        System.out.println("Combined markdown created: " + combinedFile.getFileName());
+    }
