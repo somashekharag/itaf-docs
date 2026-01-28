@@ -1,42 +1,47 @@
-   private void combineFiles(Path directory) throws Exception {
+private void combineFiles(Path destinationDir) throws Exception {
 
-        Path combinedFile = directory.resolve(
-                props.getCombine().getOutputFile()
-        );
+    Path combinedFile = destinationDir.resolve(
+            props.getCombine().getOutputFile()
+    );
 
-        List<Path> markdownFiles = Files.list(directory)
-                .filter(p -> p.toString().endsWith(".md"))
-                .filter(p -> !p.getFileName().equals(combinedFile.getFileName()))
-                .sorted(Comparator.comparing(Path::getFileName))
-                .toList();
+    try (BufferedWriter writer = Files.newBufferedWriter(
+            combinedFile,
+            StandardCharsets.UTF_8,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING
+    )) {
 
-        try (BufferedWriter writer = Files.newBufferedWriter(
-                combinedFile,
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING
-        )) {
+        List<String> sourcePaths = props.getSourcePaths();
 
-            for (int i = 0; i < markdownFiles.size(); i++) {
-                Path file = markdownFiles.get(i);
+        for (int i = 0; i < sourcePaths.size(); i++) {
+            String sourcePath = sourcePaths.get(i);
 
-                Files.lines(file, StandardCharsets.UTF_8).forEach(line -> {
-                    try {
-                        writer.write(line);
-                        writer.newLine();
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                });
+            Path file = destinationDir.resolve(
+                    Path.of(sourcePath).getFileName().toString()
+            );
 
-                if (i < markdownFiles.size() - 1) {
+            if (!Files.exists(file)) {
+                throw new IllegalStateException("Expected file not found: " + file);
+            }
+
+            Files.lines(file, StandardCharsets.UTF_8).forEach(line -> {
+                try {
+                    writer.write(line);
                     writer.newLine();
-                    writer.write(props.getCombine().getSeparator());
-                    writer.newLine();
-                    writer.newLine();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
                 }
+            });
+
+            if (i < sourcePaths.size() - 1) {
+                writer.newLine();
+                writer.write(props.getCombine().getSeparator());
+                writer.newLine();
+                writer.newLine();
             }
         }
-
-        System.out.println("Combined markdown created: " + combinedFile.getFileName());
     }
+
+    System.out.println("Combined markdown created with preserved order: "
+            + combinedFile.getFileName());
+}
